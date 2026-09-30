@@ -171,3 +171,10 @@ pub struct StakingRewardClaimed {
     pub amount: i128,
     pub timestamp: u64,
 }
+
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalVote {
+    pub proposal_id: u32,
+    pub vote: bool,
+}

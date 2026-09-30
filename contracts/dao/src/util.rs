@@ -73,7 +73,18 @@ pub fn require_active_member(env: &Env, caller: &Address) -> Result<Member, Erro
 /// One base vote per active member, plus a quadratic (square-root) boost for
 /// staked commitment, capped at `MAX_STAKE_BONUS`.
 pub fn voting_weight(env: &Env, who: &Address) -> i128 {
-    BASE_VOTE_WEIGHT + stake_boost(storage::get_stake(env, who))
+    if let Some(_) = storage::get_delegation(env, who) {
+        return 0; // delegated their vote away
+    }
+    let mut total = BASE_VOTE_WEIGHT + stake_boost(storage::get_stake(env, who));
+    for member in storage::get_members(env).iter() {
+        if let Some(delegatee) = storage::get_delegation(env, &member) {
+            if delegatee == *who {
+                total += BASE_VOTE_WEIGHT + stake_boost(storage::get_stake(env, &member));
+            }
+        }
+    }
+    total
 }
 
 /// Bonus votes earned by `staked` under the quadratic staking curve:
