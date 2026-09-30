@@ -118,6 +118,10 @@ impl OurDao {
         membership::claim_rewards(&env, member)
     }
 
+    pub fn delegate_vote(env: Env, delegator: Address, delegatee: Address) -> Result<(), Error> {
+        membership::delegate_vote(&env, delegator, delegatee)
+    }
+
     // ==================== loans ====================
 
     pub fn request_loan(
@@ -145,6 +149,17 @@ impl OurDao {
         support: bool,
     ) -> Result<(), Error> {
         loans::vote_on_loan_proposal(&env, voter, proposal_id, support)
+    }
+
+    pub fn vote_batch(
+        env: Env,
+        voter: Address,
+        votes: Vec<crate::types::ProposalVote>,
+    ) -> Result<(), Error> {
+        for v in votes.iter() {
+            loans::vote_on_loan_proposal(&env, voter.clone(), v.proposal_id, v.vote)?;
+        }
+        Ok(())
     }
 
     pub fn disburse_approved_loan(env: Env, proposal_id: u32) -> Result<(), Error> {
@@ -209,6 +224,14 @@ impl OurDao {
         proposal_id: u32,
     ) -> Result<(), Error> {
         treasury::execute_approved(&env, proposal_id)
+    }
+
+    // ==================== maintenance ====================
+
+    #[allow(deprecated)]
+    pub fn bump_dao_ttl(env: Env) {
+        storage::extend_instance(&env);
+        env.events().publish((soroban_sdk::symbol_short!("TtlBumped"),), ());
     }
 
     // ==================== native swap: staking ====================

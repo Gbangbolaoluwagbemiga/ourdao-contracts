@@ -150,3 +150,22 @@ fn compute_pending_yield(env: &Env, addr: &Address) -> i128 {
     let snap = storage::get_yield_snapshot(env, addr);
     (acc - snap).max(0)
 }
+
+#[allow(deprecated)]
+pub fn delegate_vote(env: &Env, delegator: Address, delegatee: Address) -> Result<(), Error> {
+    util::require_initialized(env)?;
+    util::require_not_paused(env)?;
+    delegator.require_auth();
+
+    util::require_active_member(env, &delegator)?;
+    util::require_active_member(env, &delegatee)?;
+
+    if delegator == delegatee {
+        return Err(Error::InvalidDelegation);
+    }
+
+    storage::set_delegation(env, &delegator, &delegatee);
+    env.events()
+        .publish((symbol_short!("delegate"),), (delegator, delegatee));
+    Ok(())
+}

@@ -378,7 +378,17 @@ fn repay_loan_internal(
         return Err(Error::LoanNotActive);
     }
 
-    let outstanding = loan.total_repayment - loan.amount_repaid;
+    let mut outstanding = loan.total_repayment - loan.amount_repaid;
+
+    let now = env.ledger().timestamp();
+    if now > loan.due_time {
+        let policy = storage::get_policy(env);
+        let penalty = outstanding * (policy.default_penalty_bps as i128) / crate::types::BASIS_POINTS;
+        outstanding += penalty;
+        loan.total_repayment += penalty;
+        loan.principal += penalty; // Keep penalty in treasury, don't distribute as interest
+    }
+
     let amount = amount.unwrap_or(outstanding);
     if amount <= 0 || amount > outstanding {
         return Err(Error::InvalidAmount);
