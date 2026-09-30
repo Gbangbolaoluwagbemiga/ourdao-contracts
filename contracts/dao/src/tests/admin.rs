@@ -285,3 +285,9 @@ fn policy_update_cancel_by_admin() {
     let res = s.client.try_execute_policy_update(&s.admin);
     assert_eq!(res, Err(Ok(Error::NoPendingPolicy)));
 }
+
+#[test]
+fn test_bump_dao_ttl() {
+    let s = setup(1);
+    s.client.bump_dao_ttl();
+}
