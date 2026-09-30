@@ -58,9 +58,9 @@ pub fn unstake(env: &Env, member: Address, amount: i128) -> Result<(), Error> {
     }
 
     let new_stake = current - amount;
+    util::token_client(env).transfer(&util::contract_address(env), &member, &amount);
     storage::set_stake(env, &member, new_stake);
     storage::set_total_staked(env, storage::get_total_staked(env) - amount);
-    util::token_client(env).transfer(&util::contract_address(env), &member, &amount);
     storage::extend_instance(env);
 
     env.events()
