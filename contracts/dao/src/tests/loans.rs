@@ -672,6 +672,17 @@ fn edit_loan_proposal_emits_loan_edit_event() {
     assert_eq!(after.total_repayment, expected.total_repayment);
 }
 
+// Issue #171: Reject zero-amount loan proposals
+#[test]
+fn zero_amount_loan_request_rejected() {
+    let s = setup(1);
+    let borrower = s.members.get(0).unwrap();
+
+    let err = s.client.try_request_loan(&borrower, &0, &None);
+    assert_eq!(err, Err(Ok(Error::InvalidAmount)));
+
+    let err_neg = s.client.try_request_loan(&borrower, &-100, &None);
+    assert_eq!(err_neg, Err(Ok(Error::InvalidAmount)));
 // ==================== issue #190: member loan stats view ====================
 #[test]
 fn member_loan_stats_track_lifecycle() {
