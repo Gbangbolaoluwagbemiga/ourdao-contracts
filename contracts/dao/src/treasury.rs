@@ -20,7 +20,8 @@ pub fn propose_withdrawal(
     if amount <= 0 {
         return Err(Error::InvalidAmount);
     }
-    if amount > util::treasury_balance(env) {
+    let available = util::treasury_balance(env) - util::reserved_loan_commitments(env);
+    if amount > available {
         return Err(Error::InsufficientTreasury);
     }
 

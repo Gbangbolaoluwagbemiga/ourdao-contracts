@@ -2,7 +2,7 @@ use soroban_sdk::{token, Address, Env};
 
 use crate::error::Error;
 use crate::storage;
-use crate::types::{Member, MemberStatus};
+use crate::types::{Member, MemberStatus, ProposalStatus};
 
 /// Staked tokens above this unit grant one extra unit of voting weight...
 pub const STAKE_WEIGHT_UNIT: i128 = 100;
@@ -76,4 +76,21 @@ pub fn required_votes(active_members: u32, threshold_bps: u32) -> i128 {
     let base = active_members as i128;
     let bp = crate::types::BASIS_POINTS;
     (base * threshold_bps as i128 + bp - 1) / bp
+}
+
+/// Returns the total amount committed to loan proposals that have passed
+/// quorum but have not yet been disbursed (status == ApprovedPendingDisbursement).
+/// These funds are effectively reserved and must not be double-counted as
+/// available treasury for new withdrawals (#172).
+pub fn reserved_loan_commitments(env: &Env) -> i128 {
+    let count = storage::get_proposal_count(env, storage::DataKey::NextProposalId);
+    let mut total: i128 = 0;
+    for id in 0..count {
+        if let Some(proposal) = storage::get_loan_proposal(env, id) {
+            if proposal.status == ProposalStatus::ApprovedPendingDisbursement {
+                total += proposal.amount;
+            }
+        }
+    }
+    total
 }

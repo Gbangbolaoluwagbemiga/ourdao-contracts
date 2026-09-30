@@ -1963,3 +1963,92 @@ fn edit_loan_proposal_emits_loan_edit_event() {
     let expected = s.client.calculate_loan_terms(&600);
     assert_eq!(after.total_repayment, expected.total_repayment);
 }
+
+// ===========================================================================
+// Issue #171: Reject zero-amount loan proposals
+// ===========================================================================
+
+#[test]
+fn zero_amount_loan_request_rejected() {
+    let s = setup(1);
+    let borrower = s.members.get(0).unwrap();
+
+    let err = s.client.try_request_loan(&borrower, &0, &None);
+    assert_eq!(err, Err(Ok(Error::InvalidAmount)));
+
+    let err_neg = s.client.try_request_loan(&borrower, &-100, &None);
+    assert_eq!(err_neg, Err(Ok(Error::InvalidAmount)));
+}
+
+// ===========================================================================
+// Issue #172: Treasury withdrawal must account for reserved loan commitments
+// ===========================================================================
+
+#[test]
+fn treasury_withdrawal_blocked_by_approved_pending_loan() {
+    // 4 members => treasury 4000.
+    let s = setup(4);
+    let borrower = s.members.get(0).unwrap();
+    let v1 = s.members.get(1).unwrap();
+    let v2 = s.members.get(2).unwrap();
+    let v3 = s.members.get(3).unwrap();
+    let dest = Address::generate(&s.env);
+
+    // Drain treasury first so it can't cover both the loan and the withdrawal
+    // instantly, forcing the loan into ApprovedPendingDisbursement.
+    let drain_dest = Address::generate(&s.env);
+    let reason = String::from_str(&s.env, "drain");
+    let drain_id = s.client.propose_treasury_withdrawal(
+        &v1, &2_500, &drain_dest, &reason, &false,
+    );
+    s.client.vote_on_treasury_proposal(&v1, &drain_id, &true);
+    s.client.vote_on_treasury_proposal(&v2, &drain_id, &true);
+    s.client.vote_on_treasury_proposal(&v3, &drain_id, &true);
+    // treasury is now 1500
+
+    // Loan proposal for 1000 (within the 50% ratio of original 4000).
+    // We re-add funds so the loan can request but we control what happens next.
+    refill_treasury(&s); // +1000 => treasury 2500
+    let pid = s.client.request_loan(&borrower, &1_000, &None);
+    advance(&s.env, EDITING + 1);
+
+    // Drain again so approval parks it in ApprovedPendingDisbursement.
+    let drain2_dest = Address::generate(&s.env);
+    let drain2_id = s.client.propose_treasury_withdrawal(
+        &v1, &2_000, &drain2_dest, &reason, &false,
+    );
+    s.client.vote_on_treasury_proposal(&v1, &drain2_id, &true);
+    s.client.vote_on_treasury_proposal(&v2, &drain2_id, &true);
+    s.client.vote_on_treasury_proposal(&v3, &drain2_id, &true);
+    // treasury is now 500
+
+    s.client.vote_on_loan_proposal(&v1, &pid, &true);
+    s.client.vote_on_loan_proposal(&v2, &pid, &true);
+    s.client.vote_on_loan_proposal(&v3, &pid, &true);
+    let prop = s.client.get_loan_proposal(&pid).unwrap();
+    assert_eq!(prop.status, ProposalStatus::ApprovedPendingDisbursement);
+
+    // treasury = 500, loan commitment = 1000, so available = -500 (capped: no room).
+    // Any treasury withdrawal must be rejected since committed > available.
+    let reason2 = String::from_str(&s.env, "withdrawal attempt");
+    let blocked = s.client.try_propose_treasury_withdrawal(
+        &v1, &1, &dest, &reason2, &false,
+    );
+    assert_eq!(blocked, Err(Ok(Error::InsufficientTreasury)));
+
+    // Refill enough that committed loan is covered with some left over.
+    refill_treasury(&s); // +1000 => treasury 1500, committed 1000, available 500
+    refill_treasury(&s); // +1000 => treasury 2500, committed 1000, available 1500
+
+    // A withdrawal for exactly the available amount should succeed.
+    let ok_pid = s.client.propose_treasury_withdrawal(
+        &v1, &500, &dest, &reason2, &false,
+    );
+    assert!(s.client.get_treasury_proposal(&ok_pid).is_some());
+
+    // A withdrawal that would eat into the committed amount is still rejected.
+    let too_much = s.client.try_propose_treasury_withdrawal(
+        &v2, &1_600, &dest, &reason2, &false,
+    );
+    assert_eq!(too_much, Err(Ok(Error::InsufficientTreasury)));
+}
