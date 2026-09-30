@@ -31,8 +31,8 @@ use soroban_sdk::{contract, contractimpl, Address, Bytes, BytesN, Env, String, V
 pub use error::Error;
 pub use storage::ProposalKind;
 pub use types::{
-    Loan, LoanPolicy, LoanProposal, LoanTerms, Member, PendingPolicyUpdate, StakingRewardClaimed,
-    TreasuryProposal,
+    Loan, LoanPolicy, LoanProposal, LoanTerms, Member, MemberLoanStats, PendingPolicyUpdate,
+    StakingRewardClaimed, TreasuryProposal,
 };
 
 #[contract]
@@ -276,6 +276,19 @@ impl OurDao {
 
     pub fn get_member(env: Env, address: Address) -> Option<Member> {
         storage::get_member(&env, &address)
+    }
+
+    /// Returns `member`'s lifetime loan track record: total loans taken, loans
+    /// fully repaid, and loans currently outstanding. Single O(1) storage read;
+    /// returns `NotMember` if the address has never registered.
+    pub fn get_member_loan_stats(env: Env, member: Address) -> Result<MemberLoanStats, Error> {
+        storage::get_member(&env, &member)
+            .map(|m| MemberLoanStats {
+                total_loans: m.total_loans,
+                repaid_loans: m.repaid_loans,
+                active_loans: m.active_loans,
+            })
+            .ok_or(Error::NotMember)
     }
 
     pub fn get_loan(env: Env, loan_id: u32) -> Option<Loan> {

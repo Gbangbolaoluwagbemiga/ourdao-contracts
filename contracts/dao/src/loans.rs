@@ -308,6 +308,8 @@ fn approve_and_disburse(env: &Env, proposal: &LoanProposal) -> Result<(), Error>
     let mut borrower = storage::get_member(env, &proposal.borrower).ok_or(Error::NotMember)?;
     borrower.has_active_loan = true;
     borrower.last_loan_time = now;
+    borrower.total_loans += 1;
+    borrower.active_loans += 1;
     storage::set_member(env, &borrower);
 
     util::token_client(env).transfer(
@@ -400,6 +402,8 @@ fn repay_loan_internal(
         loan.status = LoanStatus::Repaid;
         if let Some(mut member) = storage::get_member(env, &borrower) {
             member.has_active_loan = false;
+            member.repaid_loans += 1;
+            member.active_loans = member.active_loans.saturating_sub(1);
             storage::set_member(env, &member);
         }
     }
@@ -479,6 +483,9 @@ pub fn mark_loan_defaulted(env: &Env, loan_id: u32) -> Result<(), Error> {
             .min(member.contribution);
         member.contribution -= penalty;
         member.has_active_loan = false;
+        // Defaulted loans are terminal but were never repaid, so only the
+        // outstanding count changes — `repaid_loans` deliberately stays put.
+        member.active_loans = member.active_loans.saturating_sub(1);
         storage::set_member(env, &member);
         if penalty > 0 {
             storage::set_total_contributions(env, storage::get_total_contributions(env) - penalty);
