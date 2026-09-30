@@ -63,6 +63,27 @@ fn rejected_stake_transfer_leaves_stake_storage_unchanged() {
     );
 }
 
+#[test]
+fn rejected_unstake_transfer_leaves_stake_storage_unchanged() {
+    let s = rejecting_setup(1);
+    let member = s.members.get(0).unwrap();
+
+    // Stake succeeds while transfers are allowed.
+    s.client.stake(&member, &500);
+    assert_eq!(s.client.get_stake(&member), 500);
+
+    // Reject the payout leg: counters must stay in sync with the vault.
+    s.token.set_reject_transfers(&true);
+    let result = s.client.try_unstake(&member, &500);
+    assert!(result.is_err());
+
+    assert_eq!(s.client.get_stake(&member), 500);
+    let total_staked = s
+        .env
+        .as_contract(&s.client.address, || crate::storage::get_total_staked(&s.env));
+    assert_eq!(total_staked, 500);
+}
+
 // Issue #193: StakingRewardClaimed event on yield distribution
 #[test]
 fn claim_rewards_emits_staking_reward_claimed_event_and_updates_snapshot() {
